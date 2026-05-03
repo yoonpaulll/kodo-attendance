@@ -1,1 +1,797 @@
-# kodo-attendance
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KODO — Attendance</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --border: #222;
+    --accent: #c8f550;
+    --accent2: #f55050;
+    --text: #f0f0f0;
+    --muted: #555;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+  }
+
+  /* ── SETUP OVERLAY ── */
+  #setup-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+  }
+
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .setup-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px; margin-bottom: 8px; }
+  .setup-logo span { color: var(--accent); }
+  .setup-sub { color: var(--muted); font-size: 12px; margin-bottom: 32px; line-height: 1.6; }
+
+  .setup-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
+
+  .setup-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    border-radius: 8px;
+    width: 100%;
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .setup-input:focus { border-color: var(--accent); }
+
+  .setup-hint {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 24px;
+    padding: 14px;
+    background: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .setup-hint code {
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+  }
+
+  /* ── MAIN APP ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; }
+  .logo span { color: var(--accent); }
+
+  .sync-status {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sync-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .sync-dot.ok { background: var(--accent); }
+  .sync-dot.err { background: var(--accent2); }
+  .sync-dot.loading { background: #f5a050; animation: pulse 1s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 14px 16px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    background: none;
+    border-top: none; border-left: none; border-right: none;
+    font-family: 'Space Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+
+  .panel { display: none; padding: 24px; }
+  .panel.active { display: block; }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .form-row-3 {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  input[type=text], input[type=email], select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 11px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    border-radius: 6px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, select:focus { border-color: var(--accent); }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 11px 18px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: var(--accent2); color: #fff; }
+
+  .guest-table { width: 100%; border-collapse: collapse; }
+  .guest-table th {
+    text-align: left; font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted);
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .guest-table td {
+    padding: 11px 12px; border-bottom: 1px solid var(--border);
+    font-size: 12px; vertical-align: middle;
+  }
+  .guest-table tr:hover td { background: var(--surface); }
+
+  .badge {
+    display: inline-block; padding: 3px 9px; border-radius: 12px;
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
+  }
+  .badge.pending { background: #1a1a00; color: #888830; border: 1px solid #333300; }
+  .badge.checked-in { background: #0a1a00; color: var(--accent); border: 1px solid #1a3300; }
+
+  .qr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px; margin-top: 20px;
+  }
+
+  .qr-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; text-align: center;
+  }
+  .qr-card .qr-wrap { background: white; padding: 10px; border-radius: 6px; display: inline-block; margin-bottom: 12px; }
+  .qr-card .guest-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .qr-card .ticket-id { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .qr-card .ticket-type { font-size: 10px; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+
+  .scanner-wrap { max-width: 440px; margin: 0 auto; text-align: center; }
+
+  #video-container {
+    position: relative; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; aspect-ratio: 1; margin-bottom: 16px;
+  }
+
+  #qr-video { width: 100%; height: 100%; object-fit: cover; display: none; }
+
+  #scan-overlay {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; color: var(--muted); font-size: 12px;
+  }
+
+  .result-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; margin-bottom: 16px; text-align: left;
+  }
+  .result-box.success { border-color: var(--accent); background: #0a1a00; }
+  .result-box.error { border-color: var(--accent2); background: #1a0a00; }
+  .result-box.already { border-color: #f5a050; background: #1a1000; }
+
+  .result-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; }
+  .result-label.ok { color: var(--accent); }
+  .result-label.err { color: var(--accent2); }
+  .result-label.warn { color: #f5a050; }
+  .result-name { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+  .result-meta { font-size: 12px; color: var(--muted); }
+
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 14px; margin-bottom: 28px;
+  }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+  .stat-num.green { color: var(--accent); }
+  .stat-num.red { color: var(--accent2); }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+
+  .section-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--muted); margin-bottom: 14px;
+  }
+
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 12px; }
+  .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 20px; font-size: 12px;
+    z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  canvas { display: none; }
+
+  @media (max-width: 480px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+    .form-row-3 { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SETUP OVERLAY -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <div class="setup-logo">KO<span>DO</span></div>
+    <div class="setup-sub">Paste your Google Apps Script URL to sync data across all devices in real-time.</div>
+
+    <div class="setup-label">Apps Script Web App URL</div>
+    <input class="setup-input" id="script-url-input" type="text" placeholder="https://script.google.com/macros/s/..." />
+
+    <div class="setup-hint">
+      <b style="color:var(--text)">How to get this URL:</b><br>
+      1. Open your Google Sheet → <code>Extensions → Apps Script</code><br>
+      2. Paste the script code, click Save<br>
+      3. <code>Deploy → New deployment → Web app</code><br>
+      4. Set access to <code>Anyone</code> → Deploy<br>
+      5. Copy the URL and paste above
+    </div>
+
+    <button class="btn" style="width:100%" onclick="connectSheet()">Connect & Start →</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<header>
+  <div class="logo">KO<span>DO</span></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-label" style="color:var(--muted)">–</span>
+    </div>
+    <button class="btn secondary" style="padding:7px 12px;font-size:10px" onclick="refreshData()">⟳ Sync</button>
+    <button class="btn secondary" style="padding:7px 12px;font-size:10px" onclick="changeUrl()">⚙</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('guests', this)">① Guests</button>
+  <button class="tab" onclick="switchTab('qrcodes', this)">② QR Codes</button>
+  <button class="tab" onclick="switchTab('scanner', this)">③ Scanner</button>
+  <button class="tab" onclick="switchTab('stats', this)">④ Stats</button>
+</div>
+
+<!-- GUESTS -->
+<div class="panel active" id="tab-guests">
+  <div class="section-title">Add Offline Guest</div>
+  <div class="form-row">
+    <input type="text" id="g-name" placeholder="Full Name" />
+    <input type="email" id="g-email" placeholder="Email (optional)" />
+  </div>
+  <div class="form-row-3" style="margin-bottom:28px">
+    <select id="g-type">
+      <option value="General">General</option>
+      <option value="VIP">VIP</option>
+      <option value="Comp">Comp</option>
+      <option value="Staff">Staff</option>
+    </select>
+    <button class="btn secondary" onclick="triggerCSV()">📥 CSV</button>
+    <button class="btn" id="add-btn" onclick="addGuest()">+ Add</button>
+  </div>
+  <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="handleCSV(event)"/>
+
+  <div class="section-title">Guest List (<span id="guest-count">0</span>)</div>
+  <div id="guest-list-wrap">
+    <div class="empty-state"><div class="icon">🎟️</div>Loading...</div>
+  </div>
+</div>
+
+<!-- QR CODES -->
+<div class="panel" id="tab-qrcodes">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;">
+    <div class="section-title" style="margin:0">QR Codes</div>
+    <button class="btn secondary" style="padding:7px 12px;font-size:11px" onclick="window.print()">🖨 Print All</button>
+  </div>
+  <div id="qr-grid" class="qr-grid"></div>
+</div>
+
+<!-- SCANNER -->
+<div class="panel" id="tab-scanner">
+  <div class="scanner-wrap">
+    <div id="scan-result-box" style="display:none"></div>
+    <div id="video-container">
+      <video id="qr-video" playsinline></video>
+      <div id="scan-overlay"><div>📷</div><div style="font-size:11px">Tap to start camera</div></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:24px;">
+      <button class="btn" id="scan-btn" onclick="startScanner()">Start Camera</button>
+      <button class="btn secondary" id="stop-btn" onclick="stopScanner()" style="display:none">Stop</button>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:20px;text-align:left;">
+      <div class="section-title">Manual Check-in</div>
+      <div style="display:flex;gap:10px;">
+        <input type="text" id="manual-id" placeholder="Ticket ID or Name" />
+        <button class="btn" onclick="manualCheckin()">Check In</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="panel" id="tab-stats">
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num" id="s-total">–</div><div class="stat-label">Total</div></div>
+    <div class="stat-card"><div class="stat-num green" id="s-checked">–</div><div class="stat-label">Checked In</div></div>
+    <div class="stat-card"><div class="stat-num red" id="s-pending">–</div><div class="stat-label">Pending</div></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:20px;">
+    <button class="btn secondary" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+  <div class="section-title">Full Guest Status</div>
+  <div id="stats-list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<canvas id="qr-canvas"></canvas>
+
+<script>
+let guests = [];
+let scriptUrl = '';
+let scannerStream = null;
+let scannerActive = false;
+
+// ── SETUP ──
+function connectSheet() {
+  const url = document.getElementById('script-url-input').value.trim();
+  if (!url.startsWith('https://script.google.com')) {
+    alert('Please paste a valid Apps Script URL.');
+    return;
+  }
+  scriptUrl = url;
+  localStorage.setItem('kodo_script_url', url);
+  document.getElementById('setup-overlay').style.display = 'none';
+  refreshData();
+}
+
+function changeUrl() {
+  localStorage.removeItem('kodo_script_url');
+  location.reload();
+}
+
+// ── API ──
+async function api(params) {
+  setSyncStatus('loading', 'Syncing...');
+  try {
+    let res;
+    if (params.action === 'getAll') {
+      res = await fetch(scriptUrl + '?action=getAll');
+    } else {
+      res = await fetch(scriptUrl, {
+        method: 'POST',
+        body: JSON.stringify(params)
+      });
+    }
+    const data = await res.json();
+    setSyncStatus('ok', 'Synced');
+    return data;
+  } catch(e) {
+    setSyncStatus('err', 'Offline');
+    throw e;
+  }
+}
+
+function setSyncStatus(state, label) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  dot.className = 'sync-dot ' + state;
+  lbl.textContent = label;
+  lbl.style.color = state === 'ok' ? 'var(--accent)' : state === 'err' ? 'var(--accent2)' : '#f5a050';
+}
+
+async function refreshData() {
+  try {
+    const data = await api({ action: 'getAll' });
+    guests = (data.guests || []).map(g => ({
+      id: g.ID || g.id,
+      name: g.Name || g.name,
+      email: g.Email || g.email || '',
+      type: g.Type || g.type || 'General',
+      checkedIn: (g.CheckedIn || g.checkedIn) === 'true' || (g.CheckedIn || g.checkedIn) === true,
+      checkedInAt: g.CheckedInAt || g.checkedInAt || ''
+    }));
+    renderGuestList();
+    renderStats();
+  } catch(e) {
+    toast('Could not reach sheet — check your URL');
+  }
+}
+
+// ── GUESTS ──
+function genId() {
+  return 'TKT-' + Math.random().toString(36).substr(2,6).toUpperCase();
+}
+
+async function addGuest(name, email, type) {
+  name = name || document.getElementById('g-name').value.trim();
+  email = email || document.getElementById('g-email').value.trim();
+  type = type || document.getElementById('g-type').value;
+  if (!name) { toast('Name required'); return; }
+
+  const btn = document.getElementById('add-btn');
+  btn.disabled = true; btn.textContent = '...';
+
+  const guest = { id: genId(), name, email, type, checkedIn: false, checkedInAt: '' };
+  try {
+    await api({ action: 'addGuest', ...guest });
+    guests.push(guest);
+    renderGuestList();
+    document.getElementById('g-name').value = '';
+    document.getElementById('g-email').value = '';
+    toast('✓ ' + name + ' added');
+  } catch(e) {
+    toast('Failed to add guest');
+  }
+  btn.disabled = false; btn.textContent = '+ Add';
+}
+
+function renderGuestList() {
+  document.getElementById('guest-count').textContent = guests.length;
+  const wrap = document.getElementById('guest-list-wrap');
+  if (!guests.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🎟️</div>No guests yet.</div>';
+    return;
+  }
+  wrap.innerHTML = `<table class="guest-table">
+    <thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Status</th><th></th></tr></thead>
+    <tbody>${guests.map((g,i) => `<tr>
+      <td style="color:var(--muted);font-size:10px">${g.id}</td>
+      <td>${g.name}${g.email ? `<br><span style="font-size:10px;color:var(--muted)">${g.email}</span>` : ''}</td>
+      <td style="font-size:11px;color:var(--accent)">${g.type}</td>
+      <td><span class="badge ${g.checkedIn ? 'checked-in' : 'pending'}">${g.checkedIn ? '✓ In' : 'Pending'}</span></td>
+      <td><button class="btn danger" style="padding:5px 10px;font-size:10px" onclick="removeGuest('${g.id}',${i})">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function removeGuest(id, i) {
+  if (!confirm('Remove ' + guests[i].name + '?')) return;
+  try {
+    await api({ action: 'removeGuest', id });
+    guests.splice(i, 1);
+    renderGuestList();
+    toast('Guest removed');
+  } catch(e) { toast('Failed'); }
+}
+
+// ── QR CODES ──
+function renderQRCodes() {
+  const grid = document.getElementById('qr-grid');
+  if (!guests.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">📲</div>Add guests first.</div>';
+    return;
+  }
+  grid.innerHTML = guests.map(g => `
+    <div class="qr-card">
+      <div class="qr-wrap" id="qr-${g.id}"></div>
+      <div class="guest-name">${g.name}</div>
+      <div class="ticket-type">${g.type}</div>
+      <div class="ticket-id">${g.id}</div>
+      <button class="btn secondary" style="width:100%;font-size:10px;padding:7px" onclick="downloadQR('${g.id}','${g.name}')">⬇ Save</button>
+    </div>`).join('');
+
+  guests.forEach(g => {
+    const el = document.getElementById('qr-' + g.id);
+    if (el && !el.hasChildNodes()) {
+      new QRCode(el, {
+        text: JSON.stringify({ id: g.id, name: g.name, type: g.type }),
+        width: 150, height: 150,
+        colorDark: '#000', colorLight: '#fff',
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+  });
+}
+
+function downloadQR(id, name) {
+  setTimeout(() => {
+    const el = document.getElementById('qr-' + id);
+    const src = el.querySelector('canvas') || el.querySelector('img');
+    const canvas = document.createElement('canvas');
+    canvas.width = 220; canvas.height = 270;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,220,270);
+    if (src.tagName === 'CANVAS') {
+      ctx.drawImage(src, 35, 20, 150, 150);
+    } else {
+      const img = new Image();
+      img.src = src.src;
+      img.onload = () => {
+        ctx.drawImage(img, 35, 20, 150, 150);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(name.length > 22 ? name.slice(0,22)+'…' : name, 110, 192);
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#888';
+        ctx.fillText(id, 110, 208);
+        const a = document.createElement('a');
+        a.download = `kodo-${id}.png`;
+        a.href = canvas.toDataURL();
+        a.click();
+      };
+      return;
+    }
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(name.length > 22 ? name.slice(0,22)+'…' : name, 110, 192);
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#888';
+    ctx.fillText(id, 110, 208);
+    const a = document.createElement('a');
+    a.download = `kodo-${id}.png`;
+    a.href = canvas.toDataURL();
+    a.click();
+  }, 200);
+}
+
+// ── SCANNER ──
+function startScanner() {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      scannerStream = stream;
+      scannerActive = true;
+      const video = document.getElementById('qr-video');
+      video.srcObject = stream;
+      video.style.display = 'block';
+      document.getElementById('scan-overlay').style.display = 'none';
+      document.getElementById('scan-btn').style.display = 'none';
+      document.getElementById('stop-btn').style.display = 'inline-block';
+      video.play();
+      requestAnimationFrame(scanFrame);
+    })
+    .catch(() => toast('Camera denied — use manual check-in'));
+}
+
+function stopScanner() {
+  scannerActive = false;
+  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  const video = document.getElementById('qr-video');
+  video.style.display = 'none';
+  document.getElementById('scan-overlay').style.display = 'flex';
+  document.getElementById('scan-btn').style.display = 'inline-block';
+  document.getElementById('stop-btn').style.display = 'none';
+}
+
+function scanFrame() {
+  if (!scannerActive) return;
+  const video = document.getElementById('qr-video');
+  const canvas = document.getElementById('qr-canvas');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, canvas.width, canvas.height);
+    if (code) {
+      try {
+        const data = JSON.parse(code.data);
+        processCheckin(data.id);
+        setTimeout(() => requestAnimationFrame(scanFrame), 2500);
+        return;
+      } catch(e) {}
+    }
+  }
+  requestAnimationFrame(scanFrame);
+}
+
+async function processCheckin(id) {
+  const box = document.getElementById('scan-result-box');
+  box.style.display = 'block';
+  box.innerHTML = `<div class="result-box"><div class="result-label" style="color:var(--muted)">⟳ Checking in...</div></div>`;
+
+  try {
+    const res = await api({ action: 'checkIn', id });
+    if (res.success) {
+      const guest = guests.find(g => g.id === id);
+      if (guest) { guest.checkedIn = true; guest.checkedInAt = res.time; }
+      renderGuestList();
+      box.innerHTML = `<div class="result-box success">
+        <div class="result-label ok">✓ Checked In</div>
+        <div class="result-name">${res.name}</div>
+        <div class="result-meta">${res.type} · ${res.time}</div>
+      </div>`;
+    } else if (res.reason === 'already') {
+      const g = guests.find(x => x.id === id);
+      box.innerHTML = `<div class="result-box already">
+        <div class="result-label warn">⚠ Already In</div>
+        <div class="result-name">${g ? g.name : id}</div>
+        <div class="result-meta">Checked in at ${g ? g.checkedInAt : '–'}</div>
+      </div>`;
+    } else {
+      box.innerHTML = `<div class="result-box error">
+        <div class="result-label err">✕ Not Found</div>
+        <div class="result-name" style="font-size:14px;color:var(--accent2)">Unknown Ticket</div>
+        <div class="result-meta">${id}</div>
+      </div>`;
+    }
+  } catch(e) {
+    box.innerHTML = `<div class="result-box error"><div class="result-label err">No connection</div></div>`;
+  }
+}
+
+async function manualCheckin() {
+  const query = document.getElementById('manual-id').value.trim().toLowerCase();
+  if (!query) return;
+  const guest = guests.find(g =>
+    g.id.toLowerCase() === query ||
+    g.name.toLowerCase().includes(query)
+  );
+  if (!guest) { toast('Guest not found: ' + query); }
+  else { await processCheckin(guest.id); }
+  document.getElementById('manual-id').value = '';
+}
+
+// ── STATS ──
+function renderStats() {
+  const total = guests.length;
+  const checked = guests.filter(g => g.checkedIn).length;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-checked').textContent = checked;
+  document.getElementById('s-pending').textContent = total - checked;
+
+  const list = document.getElementById('stats-list');
+  if (!guests.length) { list.innerHTML = '<div class="empty-state"><div class="icon">📋</div>No guests yet.</div>'; return; }
+  const sorted = [...guests].sort((a,b) => b.checkedIn - a.checkedIn);
+  list.innerHTML = `<table class="guest-table">
+    <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Time</th></tr></thead>
+    <tbody>${sorted.map(g => `<tr>
+      <td>${g.name}</td>
+      <td style="font-size:10px;color:var(--muted)">${g.type}</td>
+      <td><span class="badge ${g.checkedIn ? 'checked-in' : 'pending'}">${g.checkedIn ? '✓ In' : 'Pending'}</span></td>
+      <td style="font-size:10px;color:var(--muted)">${g.checkedInAt || '–'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function exportCSV() {
+  const rows = [['ID','Name','Email','Type','CheckedIn','Time']];
+  guests.forEach(g => rows.push([g.id, g.name, g.email, g.type, g.checkedIn?'Yes':'No', g.checkedInAt]));
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'kodo-attendance.csv';
+  a.click();
+}
+
+// ── CSV IMPORT ──
+function triggerCSV() { document.getElementById('csv-file').click(); }
+
+function handleCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const lines = e.target.result.split('\n').filter(l => l.trim());
+    let added = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (i === 0 && lines[i].toLowerCase().includes('name')) continue;
+      const parts = lines[i].split(',').map(p => p.replace(/"/g,'').trim());
+      const name = parts[0], email = parts[1]||'', type = parts[2]||'General';
+      if (name) { await addGuest(name, email, type); added++; }
+    }
+    toast(`Imported ${added} guests`);
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── TABS ──
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'qrcodes') { refreshData().then(renderQRCodes); }
+  if (name === 'stats') { refreshData().then(renderStats); }
+  if (name !== 'scanner') stopScanner();
+}
+
+// ── TOAST ──
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── INIT ──
+const savedUrl = localStorage.getItem('kodo_script_url');
+if (savedUrl) {
+  scriptUrl = savedUrl;
+  document.getElementById('setup-overlay').style.display = 'none';
+  refreshData();
+}
+</script>
+</body>
+</html>
