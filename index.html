@@ -633,7 +633,7 @@ function startScanner() {
       document.getElementById('scan-btn').style.display = 'none';
       document.getElementById('stop-btn').style.display = 'inline-block';
       video.play().then(() => {
-        requestAnimationFrame(scanFrame);
+        scanLoop();
       }).catch(e => {
         toast('Could not start video: ' + e.message);
       });
@@ -657,23 +657,35 @@ function scanFrame() {
   if (!scannerActive) return;
   const video = document.getElementById('qr-video');
   const canvas = document.getElementById('qr-canvas');
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+
+  if (video.readyState >= 2 && video.videoWidth > 0) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, canvas.width, canvas.height);
-    if (code) {
-      try {
-        const data = JSON.parse(code.data);
-        processCheckin(data.id);
-        setTimeout(() => requestAnimationFrame(scanFrame), 2500);
-        return;
-      } catch(e) {}
-    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    try {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, canvas.width, canvas.height, {
+        inversionAttempts: 'dontInvert'
+      });
+      if (code && code.data) {
+        try {
+          const data = JSON.parse(code.data);
+          if (data.id) {
+            processCheckin(data.id);
+            setTimeout(() => { if (scannerActive) scanLoop(); }, 2500);
+            return;
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
   }
-  requestAnimationFrame(scanFrame);
+  scanLoop();
+}
+
+function scanLoop() {
+  if (!scannerActive) return;
+  setTimeout(() => requestAnimationFrame(scanFrame), 150);
 }
 
 async function processCheckin(id) {
