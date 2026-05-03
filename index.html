@@ -378,7 +378,7 @@
   <div class="scanner-wrap">
     <div id="scan-result-box" style="display:none"></div>
     <div id="video-container">
-      <video id="qr-video" playsinline></video>
+      <video id="qr-video" playsinline autoplay muted webkit-playsinline x5-playsinline></video>
       <div id="scan-overlay"><div>📷</div><div style="font-size:11px">Tap to start camera</div></div>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;margin-bottom:24px;">
@@ -616,20 +616,31 @@ function downloadQR(id, name) {
 
 // ── SCANNER ──
 function startScanner() {
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Camera not supported on this browser');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } })
     .then(stream => {
       scannerStream = stream;
       scannerActive = true;
       const video = document.getElementById('qr-video');
       video.srcObject = stream;
+      video.setAttribute('playsinline', true);
+      video.setAttribute('webkit-playsinline', true);
       video.style.display = 'block';
       document.getElementById('scan-overlay').style.display = 'none';
       document.getElementById('scan-btn').style.display = 'none';
       document.getElementById('stop-btn').style.display = 'inline-block';
-      video.play();
-      requestAnimationFrame(scanFrame);
+      video.play().then(() => {
+        requestAnimationFrame(scanFrame);
+      }).catch(e => {
+        toast('Could not start video: ' + e.message);
+      });
     })
-    .catch(() => toast('Camera denied — use manual check-in'));
+    .catch(e => {
+      toast('Camera error: ' + (e.message || 'denied') + ' — use manual check-in');
+    });
 }
 
 function stopScanner() {
